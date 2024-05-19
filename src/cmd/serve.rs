@@ -162,12 +162,18 @@ async fn handle_request(req: Request<Body>, mut root: PathBuf) -> Result<Respons
         Ok(contents) => contents,
     };
 
+    let mime_type = mimetype_from_path(&root).first_or_octet_stream();
+    let mime_alloc;
+    let mime_with_encoding = if mime_type.type_() == "text" {
+        mime_alloc = mime_type.essence_str().to_owned() + "; charset=utf-8";
+        &mime_alloc
+    } else {
+        mime_type.essence_str()
+    };
+
     Ok(Response::builder()
         .status(StatusCode::OK)
-        .header(
-            header::CONTENT_TYPE,
-            mimetype_from_path(&root).first_or_octet_stream().essence_str(),
-        )
+        .header(header::CONTENT_TYPE, mime_with_encoding)
         .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
         .body(Body::from(contents))
         .unwrap())
@@ -230,7 +236,7 @@ async fn response_error_injector(
 
 fn livereload_js() -> Response<Body> {
     Response::builder()
-        .header(header::CONTENT_TYPE, "text/javascript")
+        .header(header::CONTENT_TYPE, "text/javascript; charset=utf-8")
         .status(StatusCode::OK)
         .body(LIVE_RELOAD.into())
         .expect("Could not build livereload.js response")
@@ -239,11 +245,11 @@ fn livereload_js() -> Response<Body> {
 fn in_memory_content(path: &RelativePathBuf, content: &str) -> Response<Body> {
     let content_type = match path.extension() {
         Some(ext) => match ext {
-            "xml" => "text/xml",
-            "json" => "application/json",
-            _ => "text/html",
+            "xml" => "text/xml; encoding=utf-8",
+            "json" => "application/json", // NB: JSON is always UTF-8 by definition
+            _ => "text/html; charset=utf-8",
         },
-        None => "text/html",
+        None => "text/html; charset=utf-8",
     };
     Response::builder()
         .header(header::CONTENT_TYPE, content_type)
@@ -254,7 +260,7 @@ fn in_memory_content(path: &RelativePathBuf, content: &str) -> Response<Body> {
 
 fn method_not_allowed() -> Response<Body> {
     Response::builder()
-        .header(header::CONTENT_TYPE, "text/plain")
+        .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
         .status(StatusCode::METHOD_NOT_ALLOWED)
         .body(METHOD_NOT_ALLOWED_TEXT.into())
         .expect("Could not build Method Not Allowed response")
@@ -276,7 +282,7 @@ fn not_found() -> Response<Body> {
 
     if let Some(body) = content {
         return Response::builder()
-            .header(header::CONTENT_TYPE, "text/html")
+            .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
             .status(StatusCode::NOT_FOUND)
             .body(body.into())
             .expect("Could not build Not Found response");
@@ -284,7 +290,7 @@ fn not_found() -> Response<Body> {
 
     // Use a plain text response when we can't find the body of the 404
     Response::builder()
-        .header(header::CONTENT_TYPE, "text/plain")
+        .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
         .status(StatusCode::NOT_FOUND)
         .body(NOT_FOUND_TEXT.into())
         .expect("Could not build Not Found response")
